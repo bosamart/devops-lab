@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: "2026-06-16T17:37:15Z"
+  labels:
+    app: flask-app
+  name: flask-app
+  namespace: default
+  resourceVersion: "1176"
+  uid: 68c9cf25-1196-4359-b11b-0bc81a96ce73
+spec:
+  clusterIP: 10.43.170.122
+  clusterIPs:
+  - 10.43.170.122
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - nodePort: 31965
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: flask-app
+  sessionAffinity: None
+  type: NodePort
+status:
+  loadBalancer: {}
