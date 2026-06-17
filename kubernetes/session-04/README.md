@@ -86,27 +86,58 @@ k3s-worker2   Ready    <none>          49s     v1.35.5+k3s1
 ## Step 4 — Deploy Flask App
 
 ```bash
-# Create deployment with 3 replicas
-sudo kubectl create deployment flask-app \
-  --image=samathbo/bosamart-nginx:v1 \
-  --replicas=3
-
-# Watch pods come up
-sudo kubectl get pods -w
-
-# Expose as NodePort service
-sudo kubectl expose deployment flask-app \
-  --port=80 \
-  --type=NodePort
-
-# Check service
-sudo kubectl get svc
+mkdir -p ~/devops-lab/kubernetes/session-04
+cd ~/devops-lab/kubernetes/session-04
 ```
 
-**Output:**
+**deployment.yaml (clean version for ArgoCD):**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+  namespace: default
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: flask-app
+  template:
+    metadata:
+      labels:
+        app: flask-app
+    spec:
+      containers:
+      - name: bosamart-nginx
+        image: samathbo/bosamart-nginx:v1
+        ports:
+        - containerPort: 80
 ```
-NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
-flask-app    NodePort    10.43.170.122   <none>        80:31965/TCP   0s
+
+**service.yaml (clean version for ArgoCD):**
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-app
+  namespace: default
+spec:
+  selector:
+    app: flask-app
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 31965
+  type: NodePort
+```
+
+> **Important:** Always use clean YAML without extra metadata (resourceVersion, uid, etc.)
+> when using ArgoCD. Exported kubectl YAML causes sync conflicts.
+
+Apply manually first time:
+```bash
+sudo kubectl apply -f deployment.yaml
+sudo kubectl apply -f service.yaml
 ```
 
 ---
@@ -120,9 +151,9 @@ sudo kubectl get pods -o wide
 **Output:**
 ```
 NAME                         READY   STATUS    NODE
-flask-app-6fb75956f5-8l5qg   1/1     Running   k3s-worker2
-flask-app-6fb75956f5-9hm8p   1/1     Running   k3s-worker1
-flask-app-6fb75956f5-fc7ww   1/1     Running   k3s-master
+flask-app-xxx   1/1     Running   k3s-worker2
+flask-app-xxx   1/1     Running   k3s-worker1
+flask-app-xxx   1/1     Running   k3s-master
 ```
 
 ✅ Kubernetes automatically spread pods across all 3 nodes
@@ -137,7 +168,7 @@ curl http://192.168.101.11:31965  # worker1
 curl http://192.168.101.12:31965  # worker2
 ```
 
-All 3 returned the Flask app response ✅
+All 3 returned the app response ✅
 
 ---
 
@@ -145,7 +176,7 @@ All 3 returned the Flask app response ✅
 
 ```bash
 # Delete a pod
-sudo kubectl delete pod flask-app-6fb75956f5-8l5qg
+sudo kubectl delete pod <pod-name>
 
 # Watch replacement
 sudo kubectl get pods -w
@@ -160,43 +191,32 @@ sudo kubectl get pods -w
 ```bash
 # Scale up to 6 pods
 sudo kubectl scale deployment flask-app --replicas=6
-sudo kubectl get pods -o wide
 
 # Scale down to 2 pods
 sudo kubectl scale deployment flask-app --replicas=2
-sudo kubectl get pods -o wide
 ```
 
 **Result:** Kubernetes added/removed pods instantly across nodes ✅
 
 ---
 
-## Step 9 — Save YAML Configs
-
-```bash
-mkdir -p ~/devops-lab/kubernetes/session-04
-cd ~/devops-lab/kubernetes/session-04
-
-sudo kubectl get deployment flask-app -o yaml > deployment.yaml
-sudo kubectl get svc flask-app -o yaml > service.yaml
-```
-
----
-
 ## Essential kubectl Commands
 
 ```bash
-kubectl get nodes                    # List all nodes
-kubectl get pods                     # List pods
-kubectl get pods -o wide             # List pods with node info
-kubectl get pods -w                  # Watch pods in real time
-kubectl get svc                      # List services
-kubectl get all                      # List everything
-kubectl describe pod <name>          # Pod details
-kubectl logs <pod-name>              # View pod logs
-kubectl delete pod <name>            # Delete a pod
+kubectl get nodes                              # List all nodes
+kubectl get nodes -o wide                      # List nodes with IP info
+kubectl get pods                               # List pods
+kubectl get pods -o wide                       # List pods with node info
+kubectl get pods -w                            # Watch pods in real time
+kubectl get pods -A                            # All pods across all namespaces
+kubectl get svc                                # List services
+kubectl get svc -A                             # All services
+kubectl get all -A                             # List everything
+kubectl describe pod <name>                    # Pod details
+kubectl logs <pod-name>                        # View pod logs
+kubectl delete pod <name>                      # Delete a pod
 kubectl scale deployment <name> --replicas=N   # Scale
-kubectl get deployment               # List deployments
+kubectl get deployment                         # List deployments
 ```
 
 ---
@@ -228,25 +248,27 @@ kubectl get deployment               # List deployments
 
 ---
 
-## GitHub Push
+## Notes on Clean YAML for ArgoCD
 
-```bash
-cd ~/devops-lab
-git add .
-git commit -m "Session 04: k3s cluster + Flask deployment + scaling"
-git push
+When you export YAML using `kubectl get ... -o yaml`, it includes extra fields:
+- `resourceVersion`
+- `uid`
+- `creationTimestamp`
+- `managedFields`
+
+These cause ArgoCD sync conflicts. Always write clean YAML from scratch when using GitOps.
+
+**Bad (exported from kubectl):**
+```yaml
+metadata:
+  name: flask-app
+  resourceVersion: "1375"    ← causes conflict
+  uid: 67476303-...          ← causes conflict
 ```
 
-**Files saved:**
-- `kubernetes/session-04/deployment.yaml`
-- `kubernetes/session-04/service.yaml`
-
----
-
-## Session 05 Preview — GitHub Actions CI/CD
-
-Next session we will:
-- Create a GitHub Actions workflow file
-- Automatically build Docker image on every git push
-- Push new image to Docker Hub automatically
-- Complete the CI part of CI/CD pipeline
+**Good (clean for ArgoCD):**
+```yaml
+metadata:
+  name: flask-app
+  namespace: default
+```
